@@ -1,0 +1,49 @@
+# docker compose up --build
+# Starts PostgreSQL, the service (migrations + predefined plans run on startup) and the example client.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: quota
+      POSTGRES_PASSWORD: quota
+      POSTGRES_DB: quota
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quota -d quota"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  service:
+    build: .
+    image: quota-service
+    environment:
+      DATABASE_URL: postgres://quota:quota@db:5432/quota
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}   # change for anything but local use
+      PORT: "3000"
+      DB_POOL_MAX: "20"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  client:
+    image: quota-service
+    command: ["node", "dist/client/demo.js"]
+    environment:
+      BASE_URL: http://service:3000
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+    depends_on:
+      service:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  pgdata:

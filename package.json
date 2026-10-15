@@ -1,0 +1,29 @@
+{
+  "name": "quota-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Usage metering and quota service (TypeScript, Fastify, PostgreSQL)",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/src/server.js",
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run",
+    "demo": "tsx client/demo.ts",
+    "perf": "tsx perf/run.ts"
+  },
+  "dependencies": {
+    "autocannon": "^8.0.0",
+    "fastify": "^5.2.0",
+    "pg": "^8.13.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/autocannon": "^7.12.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "env": {
+    "date": "2026-10-15T20:27:43.419Z",
+    "node": "v22.22.2",
+    "os": "Linux 6.18.44-fc-v114 x64",
+    "cpus": "1 x Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "memoryGB": 4,
+    "connections": 10,
+    "durationSeconds": 10,
+    "baseUrl": "http://localhost:3000"
+  },
+  "results": [
+    {
+      "scenario": "many-users",
+      "description": "1 account, 200 users, allowances never reached (all accepted)",
+      "requestsPerSec": 178,
+      "totalRequests": 1784,
+      "latencyMs": {
+        "avg": 55.27,
+        "p50": 51,
+        "p90": 93,
+        "p99": 169,
+        "max": 283
+      },
+      "http2xx": 1784,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 1793,
+        "accepted": 1793,
+        "rejected": 0
+      }
+    },
+    {
+      "scenario": "hot-user",
+      "description": "1 account, 1 user (worst-case row contention)",
+      "requestsPerSec": 211,
+      "totalRequests": 2109,
+      "latencyMs": {
+        "avg": 46.7,
+        "p50": 44,
+        "p90": 81,
+        "p99": 135,
+        "max": 265
+      },
+      "http2xx": 2109,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 2119,
+        "accepted": 2119,
+        "rejected": 0
+      }
+    },
+    {
+      "scenario": "multi-account",
+      "description": "20 accounts x 10 users, allowances never reached",
+      "requestsPerSec": 268,
+      "totalRequests": 2684,
+      "latencyMs": {
+        "avg": 36.66,
+        "p50": 36,
+        "p90": 45,
+        "p99": 59,
+        "max": 88
+      },
+      "http2xx": 2684,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 2694,
+        "accepted": 2694,
+        "rejected": 0
+      }
+    },
+    {
+      "scenario": "saturation",
+      "description": "1 account, 50 users, shared allowance 1000 units (most requests rejected)",
+      "requestsPerSec": 216,
+      "totalRequests": 2155,
+      "latencyMs": {
+        "avg": 45.78,
+        "p50": 44,
+        "p90": 65,
+        "p99": 109,
+        "max": 182
+      },
+      "http2xx": 2155,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 2163,
+        "accepted": 1000,
+        "rejected": 1163
+      }
+    }
+  ]
+}

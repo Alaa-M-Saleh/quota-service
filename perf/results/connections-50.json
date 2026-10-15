@@ -1,0 +1,106 @@
+{
+  "env": {
+    "date": "2026-10-15T20:25:08.064Z",
+    "node": "v22.22.2",
+    "os": "Linux 6.18.44-fc-v114 x64",
+    "cpus": "1 x Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "memoryGB": 4,
+    "connections": 50,
+    "durationSeconds": 10,
+    "baseUrl": "http://localhost:3000"
+  },
+  "results": [
+    {
+      "scenario": "many-users",
+      "description": "1 account, 200 users, allowances never reached (all accepted)",
+      "requestsPerSec": 204,
+      "totalRequests": 2036,
+      "latencyMs": {
+        "avg": 243.79,
+        "p50": 220,
+        "p90": 363,
+        "p99": 577,
+        "max": 875
+      },
+      "http2xx": 2036,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 2059,
+        "accepted": 2059,
+        "rejected": 0
+      }
+    },
+    {
+      "scenario": "hot-user",
+      "description": "1 account, 1 user (worst-case row contention)",
+      "requestsPerSec": 217,
+      "totalRequests": 2172,
+      "latencyMs": {
+        "avg": 227.01,
+        "p50": 199,
+        "p90": 347,
+        "p99": 562,
+        "max": 842
+      },
+      "http2xx": 2172,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 2187,
+        "accepted": 2187,
+        "rejected": 0
+      }
+    },
+    {
+      "scenario": "multi-account",
+      "description": "20 accounts x 10 users, allowances never reached",
+      "requestsPerSec": 278,
+      "totalRequests": 2776,
+      "latencyMs": {
+        "avg": 178.14,
+        "p50": 176,
+        "p90": 207,
+        "p99": 233,
+        "max": 269
+      },
+      "http2xx": 2776,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 2809,
+        "accepted": 2809,
+        "rejected": 0
+      }
+    },
+    {
+      "scenario": "saturation",
+      "description": "1 account, 50 users, shared allowance 1000 units (most requests rejected)",
+      "requestsPerSec": 244,
+      "totalRequests": 2444,
+      "latencyMs": {
+        "avg": 201.85,
+        "p50": 183,
+        "p90": 281,
+        "p99": 426,
+        "max": 762
+      },
+      "http2xx": 2444,
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0,
+      "verification": {
+        "ok": true,
+        "decisions": 2452,
+        "accepted": 1000,
+        "rejected": 1452
+      }
+    }
+  ]
+}
