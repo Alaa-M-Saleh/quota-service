@@ -12,8 +12,9 @@ Stack: TypeScript, Fastify, PostgreSQL (plain SQL via `pg`, zod for validation).
 docker compose up --build        # PostgreSQL + service + example client
 ```
 
-The `client` container runs the demo (accepted request, user-limit rejection, shared-account rejection, plan change,
-usage/outcomes) and exits; the service stays up on <http://localhost:3000>. Configuration: `ADMIN_TOKEN`
+Then open the **web console at <http://localhost:8080>** (see below). The `client` container also runs a scripted
+command-line demo (accepted request, user-limit rejection, shared-account rejection, plan change, usage/outcomes) and exits;
+the core API stays up on <http://localhost:3000>. Configuration: `ADMIN_TOKEN`
 (default `dev-admin-token`, override with `ADMIN_TOKEN=... docker compose up --build`).
 
 Without Docker (needs Node 22 and PostgreSQL):
@@ -22,7 +23,8 @@ Without Docker (needs Node 22 and PostgreSQL):
 npm ci
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/quota ADMIN_TOKEN=dev-admin-token
 npm run build && npm start        # applies migrations + seeds predefined plans on startup
-npm run demo                      # in another shell (BASE_URL defaults to http://localhost:3000)
+npm run demo                      # scripted CLI demo (BASE_URL defaults to http://localhost:3000)
+npm run web                       # web console on http://localhost:8080 (API_URL defaults to http://localhost:3000)
 ```
 
 | Variable | Default | Meaning |
@@ -32,6 +34,27 @@ npm run demo                      # in another shell (BASE_URL defaults to http:
 | `PORT` / `HOST` | 3000 / 0.0.0.0 | Listen address |
 | `DB_POOL_MAX` | 20 | Connection pool size |
 | `LOG_LEVEL` | info | Fastify/pino log level |
+
+Web console server only: `API_URL` (core service, default `http://localhost:3000`), `PORT` (default 8080), and optional
+`ADMIN_TOKEN` (see below).
+
+## Web console
+
+`web/` is a small server plus a single self-contained page (no external assets) that covers every feature of the core service:
+
+| Section | What you can do |
+|---|---|
+| Account | Create an account (shows the API key once) or connect with an existing key; view and change the account plan |
+| Plans | List predefined and custom plans; create, edit and delete custom plans (predefined are read-only; assigned plans cannot be deleted) |
+| Users | Register users with a plan; change a user's plan; jump to their usage |
+| Consume units | Send a consume request; see the decision as a receipt (balances after acceptance, or the rejection code, scope, rule and numbers); resend the same request ID to see an idempotent replay; reuse an ID with different units to see the 409 conflict |
+| Usage | Current or past UTC month: shared account meter and one meter per user; month-by-month totals for the account or a single user |
+| Request history | Every accepted and rejected decision, filter by user, outcome and month, load older pages |
+
+How it works: the server serves the page and proxies `/api/*` to the core service, so the browser stays on one origin (no CORS).
+The API key is kept in this browser's `localStorage`; "Disconnect" removes it. Account creation needs the operator's admin token: either type it in the
+form, or set `ADMIN_TOKEN` on the console server (Docker Compose does this by default), in which case the console adds it for
+`/admin/accounts` only. **Anyone who can open the console can then create accounts**, so treat the console as an operator/demo tool and do not expose it publicly with an admin token configured.
 
 ## Behavior and assumptions
 
@@ -111,13 +134,15 @@ Trade-off: all consumption for one account serialises on its account counter row
 npm test
 ```
 
-32 tests against a real PostgreSQL (wiped between tests, `fileParallelism` off) covering: admin/API-key auth, account isolation
+36 tests against a real PostgreSQL (wiped between tests, `fileParallelism` off) covering: admin/API-key auth, account isolation
 (users, plans, usage, history, request ids), predefined/read-only plans, custom plans and deletion rules, accept/reject decisions and reasons,
 per-request caps, exact fit, idempotent replay of accepted and rejected outcomes, 409 conflicts, history filters and paging, UTC month rollover
 and historical queries, immediate plan changes, allowance reduction below usage, shared plans with separate usage, concurrency
 (400 parallel requests against a 100-unit account allowance ⇒ exactly 100 accepted; per-user limit; 50 parallel duplicates of one request id ⇒
-consumed once; plan lowered mid-flight), and persistence across a restart (new pool and app instance).
-All 32 passed on 2026-10-15 in the environment below.
+consumed once; plan lowered mid-flight), and persistence across a restart (new pool and app instance). The web console is tested by loading the real page and its real
+script in jsdom and driving it against the real console server and core service: it creates an account, plans and users, runs accepted, user-limit,
+account-limit, replayed and conflicting requests, changes a plan, checks usage and history, and tests filters, disconnect and bad/good API keys.
+All 36 passed in the environment below. The page has not been viewed in a real browser by the author, so visual layout is unchecked.
 
 ## Performance
 

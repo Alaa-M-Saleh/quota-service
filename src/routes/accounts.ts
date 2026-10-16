@@ -34,11 +34,12 @@ export function adminRoutes(app: FastifyInstance, pool: Pool, adminToken: string
 export function accountRoutes(app: FastifyInstance, pool: Pool) {
   app.get('/account', async (req) => {
     const r = await pool.query(
-      `SELECT a.id, a.name, a.created_at, p.* FROM accounts a JOIN plans p ON p.id = a.plan_id WHERE a.id = $1`,
+      `SELECT a.id AS acct_id, a.name AS acct_name, a.created_at AS acct_created_at, p.*
+         FROM accounts a JOIN plans p ON p.id = a.plan_id WHERE a.id = $1`,
       [req.accountId],
     );
     const row = r.rows[0];
-    return { id: row.id, name: row.name, createdAt: row.created_at, plan: serializePlan(row as PlanRow) };
+    return { id: row.acct_id, name: row.acct_name, createdAt: row.acct_created_at, plan: serializePlan(row as PlanRow) };
   });
 
   app.put('/account/plan', async (req) => {

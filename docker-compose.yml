@@ -34,6 +34,19 @@ services:
       timeout: 3s
       retries: 30
 
+  web:
+    image: quota-service
+    command: ["node", "dist/web/server.js"]
+    environment:
+      API_URL: http://service:3000
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}   # lets the console create accounts without typing the token
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      service:
+        condition: service_healthy
+
   client:
     image: quota-service
     command: ["node", "dist/client/demo.js"]

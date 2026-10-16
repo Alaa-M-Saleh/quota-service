@@ -18,6 +18,7 @@ describe('bootstrap, authentication and isolation', () => {
     const a = await createAccount(c.app);
     expect(a.key).toMatch(/^qk_[0-9a-f]{64}$/);
     const info = await a.call('GET', '/account');
+    expect(info.body).toMatchObject({ id: a.accountId, name: 'acme' }); // account fields, not the plan's
     expect(info.body.plan.id).toBe('starter');
     const stored = await c.pool.query('SELECT api_key_hash FROM accounts WHERE id = $1', [a.accountId]);
     expect(stored.rows[0].api_key_hash).not.toContain(a.key);

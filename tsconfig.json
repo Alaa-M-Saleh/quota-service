@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "commonjs",
     "moduleResolution": "node",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,5 +14,12 @@
     "rootDir": ".",
     "noEmit": false
   },
-  "include": ["src", "client", "perf", "tests", "vitest.config.ts"]
+  "include": [
+    "src",
+    "client",
+    "perf",
+    "web",
+    "tests",
+    "vitest.config.ts"
+  ]
 }

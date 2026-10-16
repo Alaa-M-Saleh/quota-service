@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quota console</title>
+<style>
+  :root {
+    --ink: #17283b;
+    --muted: #586677;
+    --paper: #f2f4f7;
+    --panel: #ffffff;
+    --rule: #d3d9e0;
+    --ok: #0b7a75;
+    --ok-bg: #e3f2f1;
+    --warn: #a86a12;
+    --warn-bg: #fbf0dc;
+    --bad: #b3261e;
+    --bad-bg: #fbe7e5;
+    --focus: #2457d6;
+    --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { font-family: var(--sans); color: var(--ink); background: var(--paper); font-size: 15px; line-height: 1.5; }
+  body { margin: 0; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--ink); color: #fff; padding: 8px 12px; z-index: 50; }
+  .skip:focus { left: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--mono); font-size: 0.92em; }
+
+  .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+  .side { border-right: 1px solid var(--rule); padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; position: sticky; top: 0; height: 100vh; background: var(--paper); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.1rem; letter-spacing: -0.01em; }
+  .glyph { width: 26px; height: 14px; border: 2px solid var(--ink); border-radius: 2px; background:
+    linear-gradient(90deg, var(--ink) 0 62%, transparent 62%),
+    repeating-linear-gradient(90deg, transparent 0 4px, rgba(255,255,255,.7) 4px 5px); }
+  .who { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 10px 0; min-height: 62px; }
+  .who strong { display: block; color: var(--ink); font-size: 0.98rem; }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav a { padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-weight: 600; }
+  nav a:hover { background: #e6eaef; }
+  nav a[aria-current="page"] { background: var(--ink); color: #fff; }
+  nav a.disabled { color: #8a95a3; pointer-events: none; }
+  .side-foot { margin-top: auto; font-size: 0.82rem; color: var(--muted); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #8a95a3; margin-right: 6px; }
+  .dot.up { background: var(--ok); } .dot.down { background: var(--bad); }
+
+  main { padding: 28px clamp(16px, 4vw, 48px) 64px; max-width: 1040px; width: 100%; }
+  main:focus { outline: none; }
+  h1 { font-size: 1.7rem; margin: 0 0 4px; letter-spacing: -0.02em; line-height: 1.2; }
+  h2 { font-size: 1.1rem; margin: 0 0 10px; letter-spacing: -0.005em; }
+  .lede { color: var(--muted); margin: 0 0 24px; max-width: 62ch; }
+  section.block { border-top: 2px solid var(--ink); padding-top: 14px; margin-top: 30px; }
+  section.block:first-of-type { margin-top: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 16px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+
+  label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 0.82rem; display: block; }
+  input, select, button, textarea { font: inherit; color: inherit; }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid #aeb7c2; border-radius: 4px; background: #fff; min-height: 38px; }
+  .field { margin-bottom: 12px; }
+  .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .row > .field { flex: 1 1 140px; margin-bottom: 0; }
+  button { cursor: pointer; border-radius: 4px; padding: 8px 14px; border: 1px solid var(--ink); background: var(--ink); color: #fff; font-weight: 700; min-height: 38px; }
+  button:hover { background: #0f1c2b; }
+  button.secondary { background: #fff; color: var(--ink); }
+  button.secondary:hover { background: #e9edf2; }
+  button.danger { background: #fff; color: var(--bad); border-color: var(--bad); }
+  button.danger:hover { background: var(--bad-bg); }
+  button.small { padding: 4px 10px; min-height: 30px; font-size: 0.86rem; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--rule); }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 0.82rem; color: var(--muted); font-weight: 700; background: #f8f9fb; }
+  td.r, th.r { text-align: right; }
+  .scroll { overflow-x: auto; }
+  .empty { padding: 22px; border: 1px dashed #aeb7c2; border-radius: 4px; color: var(--muted); background: #fafbfc; }
+  .empty a { color: var(--focus); font-weight: 700; }
+
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; border: 1px solid var(--rule); background: #eef1f5; color: var(--muted); white-space: nowrap; }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); border-color: #b5dad8; }
+  .chip.bad { background: var(--bad-bg); color: var(--bad); border-color: #efc1bd; }
+  .chip.warn { background: var(--warn-bg); color: var(--warn); border-color: #ecd3a5; }
+
+  /* The allowance meter: a ticked track that fills and changes colour as the limit approaches. */
+  .meter { margin: 10px 0 16px; }
+  .meter-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; margin-bottom: 4px; }
+  .track { position: relative; height: 16px; background: #e4e8ee; border-radius: 2px; overflow: hidden; }
+  .fill { height: 100%; background: var(--ok); }
+  .track::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 9px, rgba(255,255,255,.75) 9px 10px); }
+  .meter.warn .fill { background: var(--warn); }
+  .meter.over .fill { background: var(--bad); }
+  .meter-foot { font-size: 0.84rem; color: var(--muted); margin-top: 3px; }
+  .meter.over .meter-foot { color: var(--bad); font-weight: 600; }
+
+  .receipt { border: 2px solid var(--ink); background: var(--panel); border-radius: 4px; padding: 16px; margin-top: 20px; }
+  .receipt.accepted { border-color: var(--ok); }
+  .receipt.rejected, .receipt.error { border-color: var(--bad); }
+  .receipt h2 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 18px; margin: 10px 0; }
+  dt { color: var(--muted); font-weight: 600; } dd { margin: 0; word-break: break-word; }
+  details summary { cursor: pointer; color: var(--muted); font-weight: 600; margin-top: 8px; }
+  pre { background: #f3f5f8; padding: 10px; overflow-x: auto; border-radius: 4px; font-size: 0.82rem; }
+  .keybox { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .keybox code { background: #f3f5f8; padding: 6px 8px; border-radius: 4px; word-break: break-all; border: 1px solid var(--rule); }
+  .notice { border-left: 4px solid var(--warn); background: var(--warn-bg); padding: 10px 12px; margin: 12px 0; border-radius: 0 4px 4px 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .barcell { min-width: 140px; }
+  .minibar { height: 8px; background: var(--ok); border-radius: 1px; }
+
+  dialog { border: 2px solid var(--ink); border-radius: 4px; padding: 20px; width: min(460px, 92vw); }
+  dialog::backdrop { background: rgba(23, 40, 59, .45); }
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; max-width: min(420px, 90vw); }
+  .toast { background: var(--ink); color: #fff; padding: 10px 14px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+  .toast.bad { background: var(--bad); }
+
+  @media (max-width: 760px) {
+    .shell { grid-template-columns: 1fr; }
+    .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); }
+    nav { flex-direction: row; flex-wrap: wrap; }
+    .side-foot { margin-top: 0; }
+  }
+  @media (prefers-reduced-motion: no-preference) { .fill { transition: width .35s ease; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><span class="glyph" aria-hidden="true"></span><span>Quota console</span></div>
+    <div class="who" id="who"></div>
+    <nav id="nav" aria-label="Sections">
+      <a href="#/account" data-r="account">Account</a>
+      <a href="#/plans" data-r="plans">Plans</a>
+      <a href="#/users" data-r="users">Users</a>
+      <a href="#/consume" data-r="consume">Consume units</a>
+      <a href="#/usage" data-r="usage">Usage</a>
+      <a href="#/requests" data-r="requests">Request history</a>
+    </nav>
+    <div class="side-foot" id="health"></div>
+  </aside>
+  <main id="main" tabindex="-1"></main>
+</div>
+<div id="toasts" role="status" aria-live="polite"></div>
+<dialog id="dlg"></dialog>
+
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (n) => (n === null || n === undefined ? 'none' : Number(n).toLocaleString('en-US'));
+const when = (ts) => new Date(ts).toLocaleString();
+const currentMonth = () => new Date().toISOString().slice(0, 7); // UTC, matches the service
+const newRequestId = () => `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+const KEY = 'quota.apiKey';
+const store = {
+  get key() { try { return localStorage.getItem(KEY) || ''; } catch { return ''; } },
+  set key(v) { try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch { /* storage unavailable */ } },
+};
+const state = { account: null, plans: [], users: [], session: [], lastConsume: null, serverHasAdminToken: false };
+
+async function call(method, path, body, headers = {}) {
+  let res;
+  try {
+    const h = body === undefined ? { ...headers } : { 'content-type': 'application/json', ...headers };
+    res = await fetch('/api' + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
+  } catch {
+    return { ok: false, status: 0, body: { error: { code: 'NETWORK_ERROR', message: 'Could not reach the console server.' } } };
+  }
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { error: { code: 'BAD_RESPONSE', message: text.slice(0, 200) } }; }
+  return { ok: res.ok, status: res.status, body: data };
+}
+const v1 = (method, path, body) => call(method, '/v1' + path, body, { 'x-api-key': store.key });
+
+function toast(msg, bad = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), bad ? 7000 : 3500);
+}
+const errText = (r) => (r.body && r.body.error ? `${r.body.error.code}: ${r.body.error.message}` : `Request failed (${r.status})`);
+function fail(r) { toast(errText(r), true); }
+
+function meter(label, used, limit) {
+  if (limit === null || limit === undefined) {
+    return `<div class="meter"><div class="meter-head"><span>${esc(label)}</span><span class="num">${fmt(used)} used</span></div></div>`;
+  }
+  const pct = limit === 0 ? 100 : Math.min(100, (used / limit) * 100);
+  const cls = used > limit ? 'over' : pct >= 80 ? 'warn' : '';
+  const remaining = Math.max(0, limit - used);
+  const over = used > limit ? `, ${fmt(used - limit)} over the current allowance` : '';
+  return `<div class="meter ${cls}">
+    <div class="meter-head"><span>${esc(label)}</span><span class="num">${fmt(used)} of ${fmt(limit)}</span></div>
+    <div class="track" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${limit}" aria-valuenow="${Math.min(used, limit)}"><div class="fill" style="width:${pct}%"></div></div>
+    <div class="meter-foot num">${fmt(remaining)} remaining${over}</div></div>`;
+}
+
+const plansOfKind = (kind) => state.plans.filter((p) => p.kind === kind);
+const planLabel = (p) => `${p.name}${p.predefined ? '' : ' (custom)'}: ${fmt(p.monthlyAllowance)}/month`;
+const planOptions = (kind, selected) =>
+  plansOfKind(kind).map((p) => `<option value="${esc(p.id)}"${p.id === selected ? ' selected' : ''}>${esc(planLabel(p))}</option>`).join('');
+const planName = (id) => (state.plans.find((p) => p.id === id) || { name: id }).name;
+const userOptions = (selected) => state.users.map((u) => `<option value="${esc(u.userId)}"${u.userId === selected ? ' selected' : ''}>${esc(u.userId)}</option>`).join('');
+
+function openDialog(html) {
+  const d = $('#dlg');
+  d.innerHTML = html;
+  if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+  return d;
+}
+function closeDialog() {
+  const d = $('#dlg');
+  if (typeof d.close === 'function') d.close(); else d.removeAttribute('open');
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast('Copied to clipboard'); } catch { toast('Copy failed; select the text and copy it manually', true); }
+}
+
+/* ---------- data loading ---------- */
+async function loadContext() {
+  const [a, p] = await Promise.all([v1('GET', '/account'), v1('GET', '/plans')]);
+  if (a.status === 401) { store.key = ''; state.account = null; return false; }
+  state.account = a.ok ? a.body : null;
+  state.plans = p.ok ? p.body.plans : [];
+  const users = [];
+  let after = null;
+  do {
+    const r = await v1('GET', `/users?limit=500${after ? '&after=' + encodeURIComponent(after) : ''}`);
+    if (!r.ok) break;
+    users.push(...r.body.users);
+    after = r.body.nextAfter;
+  } while (after);
+  state.users = users;
+  return Boolean(state.account);
+}
+
+function renderWho() {
+  const a = state.account;
+  $('#who').innerHTML = a
+    ? `<strong>${esc(a.name)}</strong>Plan: ${esc(a.plan.name)}<br><span class="mono">${esc(a.id.slice(0, 8))}</span>`
+    : 'Not connected. Create an account or enter an API key.';
+  $$('#nav a').forEach((l) => l.classList.toggle('disabled', !a && l.dataset.r !== 'account'));
+}
+
+async function renderHealth() {
+  const r = await call('GET', '/health');
+  $('#health').innerHTML = r.ok ? '<span class="dot up"></span>Service reachable' : '<span class="dot down"></span>Service unreachable';
+  const cfg = await fetch('/_config').then((x) => x.json()).catch(() => ({}));
+  state.serverHasAdminToken = Boolean(cfg.adminTokenConfigured);
+}
+
+/* ---------- views ---------- */
+const views = {};
+
+views.account = async (root) => {
+  if (!state.account) {
+    root.innerHTML = `
+      <h1>Connect to an account</h1>
+      <p class="lede">An account is the application that calls the quota service. Its API key identifies it and limits every action to its own users, plans and usage.</p>
+      <div class="grid2">
+        <section class="panel" aria-labelledby="h-create">
+          <h2 id="h-create">Create an account</h2>
+          <form id="create">
+            <div class="field"><label for="c-name">Account name</label><input id="c-name" required maxlength="200" placeholder="Acme Documents"></div>
+            <div class="field"><label for="c-plan">Account plan</label><select id="c-plan"><option value="starter">Starter: 1,000/month</option><option value="pro">Pro: 100,000/month</option></select></div>
+            <div class="field"><label for="c-admin">Admin token <span class="hint">${state.serverHasAdminToken ? 'Optional here: the console server already has one.' : 'Required: set by the operator as ADMIN_TOKEN.'}</span></label>
+              <input id="c-admin" type="password" autocomplete="off"${state.serverHasAdminToken ? '' : ' required'}></div>
+            <button type="submit">Create account</button>
+          </form>
+          <div id="created"></div>
+        </section>
+        <section class="panel" aria-labelledby="h-key">
+          <h2 id="h-key">Use an existing API key</h2>
+          <form id="connect">
+            <div class="field"><label for="k-key">API key</label><input id="k-key" required autocomplete="off" placeholder="qk_..." class="mono"></div>
+            <button type="submit">Connect</button>
+          </form>
+        </section>
+      </div>`;
+    $('#create').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const headers = $('#c-admin').value ? { 'x-admin-token': $('#c-admin').value } : {};
+      const r = await call('POST', '/admin/accounts', { name: $('#c-name').value, planId: $('#c-plan').value }, headers);
+      if (!r.ok) return fail(r);
+      store.key = r.body.apiKey;
+      $('#created').innerHTML = `<div class="notice"><strong>Save this API key now.</strong> It is shown once and cannot be retrieved later.
+        <div class="keybox"><code id="newkey">${esc(r.body.apiKey)}</code><button type="button" class="secondary small" id="copykey">Copy key</button></div></div>
+        <button type="button" id="go">Continue to the console</button>`;
+      $('#copykey').addEventListener('click', () => copy(r.body.apiKey));
+      $('#go').addEventListener('click', () => render());
+    });
+    $('#connect').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      store.key = $('#k-key').value.trim();
+      if (await loadContext()) { toast('Connected'); render(); } else { store.key = ''; toast('That API key was not accepted. Check it and try again.', true); }
+    });
+    return;
+  }
+
+  const a = state.account;
+  const key = store.key;
+  root.innerHTML = `
+    <h1>${esc(a.name)}</h1>
+    <p class="lede">Account ID <span class="mono">${esc(a.id)}</span>, created ${esc(when(a.createdAt))}.</p>
+    <section class="block"><h2>Account plan</h2>
+      <p>The account plan sets the allowance shared by every user of this account. A user's own plan applies on top of it and never raises it.</p>
+      <div class="panel">
+        <dl>
+          <dt>Current plan</dt><dd>${esc(a.plan.name)} <span class="chip">${a.plan.predefined ? 'predefined' : 'custom'}</span></dd>
+          <dt>Shared monthly allowance</dt><dd class="num">${fmt(a.plan.monthlyAllowance)} units</dd>
+          <dt>Largest single request</dt><dd class="num">${a.plan.maxUnitsPerRequest === null ? 'no cap' : fmt(a.plan.maxUnitsPerRequest) + ' units'}</dd>
+        </dl>
+        <form id="acc-plan" class="row">
+          <div class="field"><label for="ap">Change account plan</label><select id="ap">${planOptions('account', a.plan.id)}</select></div>
+          <button type="submit">Apply plan</button>
+        </form>
+        <p class="hint">Changes apply to the next request. Usage already counted this month is kept.</p>
+      </div>
+    </section>
+    <section class="block"><h2>API key</h2>
+      <div class="panel"><div class="keybox"><code id="keyshow">${'•'.repeat(24)}</code>
+        <button class="secondary small" id="reveal" type="button">Show key</button>
+        <button class="secondary small" id="copy" type="button">Copy key</button></div>
+        <p class="hint">This browser stores the key to stay connected. Disconnecting removes it from this browser; the key itself stays valid.</p></div>
+      <p><button class="secondary" id="disconnect" type="button">Disconnect this browser</button></p>
+    </section>`;
+  $('#acc-plan').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await v1('PUT', '/account/plan', { planId: $('#ap').value });
+    if (!r.ok) return fail(r);
+    toast('Account plan updated');
+    render();
+  });
+  let shown = false;
+  $('#reveal').addEventListener('click', () => { shown = !shown; $('#keyshow').textContent = shown ? key : '•'.repeat(24); $('#reveal').textContent = shown ? 'Hide key' : 'Show key'; });
+  $('#copy').addEventListener('click', () => copy(key));
+  $('#disconnect').addEventListener('click', () => { store.key = ''; state.account = null; state.users = []; state.plans = []; state.session = []; state.lastConsume = null; render(); });
+};
+
+views.plans = async (root) => {
+  root.innerHTML = `
+    <h1>Plans</h1>
+    <p class="lede">A plan is a named set of limits. Predefined plans are read-only. Custom plans belong to this account, can be shared by several users, and changes apply immediately without a restart.</p>
+    <section class="block"><h2>Create a custom plan</h2>
+      <form id="new-plan" class="panel"><div class="row">
+        <div class="field"><label for="p-name">Name</label><input id="p-name" required maxlength="100"></div>
+        <div class="field"><label for="p-kind">Applies to</label><select id="p-kind"><option value="user">Users</option><option value="account">The account</option></select></div>
+        <div class="field"><label for="p-allow">Monthly allowance <span class="hint">units</span></label><input id="p-allow" type="number" min="0" step="1" required></div>
+        <div class="field"><label for="p-max">Largest request <span class="hint">units, optional</span></label><input id="p-max" type="number" min="1" step="1"></div>
+        <button type="submit">Create plan</button></div></form></section>
+    <section class="block"><h2>Available plans</h2>
+      <div class="field" style="max-width:220px"><label for="p-filter">Show</label><select id="p-filter"><option value="">All plans</option><option value="account">Account plans</option><option value="user">User plans</option></select></div>
+      <div class="scroll"><table><thead><tr><th>Name</th><th>Applies to</th><th class="r">Monthly allowance</th><th class="r">Largest request</th><th>Assigned to</th><th></th></tr></thead><tbody id="plan-rows"></tbody></table></div>
+    </section>`;
+  const assigned = (p) => {
+    if (p.kind === 'account') return state.account.plan.id === p.id ? 'This account' : '';
+    const n = state.users.filter((u) => u.planId === p.id).length;
+    return n ? `${n} user${n === 1 ? '' : 's'}` : '';
+  };
+  const drawRows = () => {
+    const f = $('#p-filter').value;
+    $('#plan-rows').innerHTML = state.plans.filter((p) => !f || p.kind === f).map((p) => `
+      <tr><td><strong>${esc(p.name)}</strong> <span class="chip">${p.predefined ? 'predefined' : 'custom'}</span><div class="hint mono">${esc(p.id)}</div></td>
+        <td>${p.kind === 'account' ? 'Account' : 'Users'}</td><td class="r num">${fmt(p.monthlyAllowance)}</td>
+        <td class="r num">${p.maxUnitsPerRequest === null ? 'no cap' : fmt(p.maxUnitsPerRequest)}</td><td>${esc(assigned(p))}</td>
+        <td class="actions">${p.predefined ? '<span class="hint">read-only</span>' : `<button class="secondary small" data-edit="${esc(p.id)}">Edit</button><button class="danger small" data-del="${esc(p.id)}">Delete</button>`}</td></tr>`).join('');
+  };
+  drawRows();
+  $('#p-filter').addEventListener('change', drawRows);
+  $('#new-plan').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = { name: $('#p-name').value, kind: $('#p-kind').value, monthlyAllowance: Number($('#p-allow').value) };
+    if ($('#p-max').value !== '') body.maxUnitsPerRequest = Number($('#p-max').value);
+    const r = await v1('POST', '/plans', body);
+    if (!r.ok) return fail(r);
+    toast(`Plan "${r.body.name}" created`);
+    render();
+  });
+  $('#plan-rows').addEventListener('click', async (e) => {
+    const edit = e.target.closest('[data-edit]');
+    const del = e.target.closest('[data-del]');
+    if (edit) {
+      const p = state.plans.find((x) => x.id === edit.dataset.edit);
+      const d = openDialog(`<form id="edit-plan"><h2>Edit plan</h2>
+        <div class="field"><label for="e-name">Name</label><input id="e-name" required value="${esc(p.name)}"></div>
+        <div class="field"><label for="e-allow">Monthly allowance <span class="hint">units</span></label><input id="e-allow" type="number" min="0" step="1" required value="${p.monthlyAllowance}"></div>
+        <div class="field"><label for="e-max">Largest request <span class="hint">units; leave empty for no cap</span></label><input id="e-max" type="number" min="1" step="1" value="${p.maxUnitsPerRequest ?? ''}"></div>
+        <p class="hint">If the allowance drops below usage already counted, remaining allowance becomes zero until the next month.</p>
+        <div class="actions"><button type="submit">Save changes</button><button type="button" class="secondary" id="e-cancel">Cancel</button></div></form>`);
+      $('#e-cancel', d).addEventListener('click', closeDialog);
+      $('#edit-plan', d).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const max = $('#e-max', d).value;
+        const r = await v1('PATCH', `/plans/${encodeURIComponent(p.id)}`, { name: $('#e-name', d).value, monthlyAllowance: Number($('#e-allow', d).value), maxUnitsPerRequest: max === '' ? null : Number(max) });
+        if (!r.ok) return fail(r);
+        closeDialog();
+        toast('Plan saved. New limits apply to the next request.');
+        render();
+      });
+    }
+    if (del) {
+      const p = state.plans.find((x) => x.id === del.dataset.del);
+      if (!window.confirm(`Delete plan "${p.name}"?`)) return;
+      const r = await v1('DELETE', `/plans/${encodeURIComponent(p.id)}`);
+      if (!r.ok) return fail(r);
+      toast(`Plan "${p.name}" deleted`);
+      render();
+    }
+  });
+};
+
+views.users = async (root) => {
+  root.innerHTML = `
+    <h1>Users</h1>
+    <p class="lede">Users are the people your application serves. You choose their IDs; each user has their own plan and their own usage totals.</p>
+    <section class="block"><h2>Register a user</h2>
+      <form id="new-user" class="panel"><div class="row">
+        <div class="field"><label for="u-id">User ID <span class="hint">as your application knows them</span></label><input id="u-id" required maxlength="200"></div>
+        <div class="field"><label for="u-plan">User plan</label><select id="u-plan">${planOptions('user', 'basic')}</select></div>
+        <button type="submit">Register user</button></div></form></section>
+    <section class="block"><h2>Registered users</h2><div id="user-list"></div></section>`;
+  const list = $('#user-list');
+  if (!state.users.length) {
+    list.innerHTML = '<div class="empty">No users yet. Register one above, then use <a href="#/consume">Consume units</a> to charge their usage.</div>';
+  } else {
+    list.innerHTML = `<div class="scroll"><table><thead><tr><th>User ID</th><th>Plan</th><th>Added</th><th></th></tr></thead><tbody>${state.users.map((u) => `
+      <tr><td><strong>${esc(u.userId)}</strong></td>
+        <td><label class="hint" for="pl-${esc(u.userId)}" style="display:none">Plan for ${esc(u.userId)}</label>
+          <select data-plan-for="${esc(u.userId)}" id="pl-${esc(u.userId)}" aria-label="Plan for ${esc(u.userId)}">${planOptions('user', u.planId)}</select></td>
+        <td>${esc(when(u.createdAt))}</td>
+        <td><a href="#/usage?user=${encodeURIComponent(u.userId)}">View usage</a></td></tr>`).join('')}</tbody></table></div>
+      <p class="hint">Choosing a different plan saves immediately and applies to the next request.</p>`;
+    list.addEventListener('change', async (e) => {
+      const sel = e.target.closest('[data-plan-for]');
+      if (!sel) return;
+      const r = await v1('PUT', `/users/${encodeURIComponent(sel.dataset.planFor)}/plan`, { planId: sel.value });
+      if (!r.ok) { fail(r); return render(); }
+      toast(`${sel.dataset.planFor} is now on ${planName(sel.value)}`);
+      const u = state.users.find((x) => x.userId === sel.dataset.planFor);
+      if (u) u.planId = sel.value;
+    });
+  }
+  $('#new-user').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await v1('POST', '/users', { userId: $('#u-id').value.trim(), planId: $('#u-plan').value });
+    if (!r.ok) return fail(r);
+    toast(`User "${r.body.userId}" registered`);
+    render();
+  });
+};
+
+function receiptHtml(r, sent) {
+  const b = r.body;
+  if (r.status !== 200) {
+    const e = (b && b.error) || { code: 'ERROR', message: `Request failed (${r.status})` };
+    const help = {
+      IDEMPOTENCY_CONFLICT: 'This request ID was already used with a different user or number of units. Use a new request ID, or resend the original values to get the original answer back.',
+      USER_NOT_FOUND: 'Register this user first on the Users page.',
+    }[e.code] || '';
+    return `<div class="receipt error"><h2>Not recorded <span class="chip bad">${esc(e.code)}</span></h2><p>${esc(e.message)}</p>${help ? `<p>${esc(help)}</p>` : ''}
+      <p class="hint">Errors like this are not saved to the request history and do not use any units.</p></div>`;
+  }
+  const common = `<dl><dt>User</dt><dd>${esc(b.userId)}</dd><dt>Units requested</dt><dd class="num">${fmt(b.units)}</dd><dt>Request ID</dt><dd class="mono">${esc(b.requestId)}</dd>
+    <dt>Month (UTC)</dt><dd>${esc(b.period)}</dd><dt>Decided at</dt><dd>${esc(when(b.timestamp))}</dd></dl>`;
+  const replayed = b.replayed ? '<span class="chip warn">Replay: original answer, nothing consumed again</span>' : '';
+  const raw = `<details><summary>Raw response</summary><pre>${esc(JSON.stringify(b, null, 2))}</pre></details>`;
+  if (b.accepted) {
+    return `<div class="receipt accepted"><h2>Accepted <span class="chip ok">${fmt(b.units)} units used</span> ${replayed}</h2>${common}
+      ${meter(`Account shared allowance (${planName(b.account.planId)})`, b.account.used, b.account.limit)}
+      ${meter(`${b.userId}'s allowance (${planName(b.user.planId)})`, b.user.used, b.user.limit)}
+      <p class="hint">Balances are as they were right after this request was counted.</p>${raw}</div>`;
+  }
+  const x = b.reason;
+  const who = x.scope === 'account' ? `Account <span class="mono">${esc(x.accountId)}</span>` : `User ${esc(x.userId)} of account <span class="mono">${esc(x.accountId)}</span>`;
+  const rule = x.rule === 'monthly_allowance' ? 'Monthly allowance' : 'Largest single request';
+  return `<div class="receipt rejected"><h2>Rejected <span class="chip bad">${esc(x.code)}</span> ${replayed}</h2>
+    <p>${esc(x.message)}</p>${common}
+    <dl><dt>Limit that applied</dt><dd>${who}</dd><dt>Rule</dt><dd>${rule}</dd><dt>Allowance</dt><dd class="num">${fmt(x.limit)}</dd>
+    ${x.used !== undefined ? `<dt>Already used</dt><dd class="num">${fmt(x.used)}</dd><dt>Remaining</dt><dd class="num">${fmt(x.remaining)}</dd>` : ''}</dl>
+    <p class="hint">Nothing was consumed. The rejection is saved in the request history.</p>${raw}</div>`;
+}
+
+views.consume = async (root) => {
+  if (!state.users.length) {
+    root.innerHTML = '<h1>Consume units</h1><div class="empty">Register a user first. Units are always consumed on behalf of a user. <a href="#/users">Go to Users</a></div>';
+    return;
+  }
+  root.innerHTML = `
+    <h1>Consume units</h1>
+    <p class="lede">This is the call your application makes before doing work. Both the account's shared allowance and the user's own allowance must cover the full amount, otherwise nothing is consumed.</p>
+    <form id="consume" class="panel"><div class="row">
+      <div class="field"><label for="c-user">User</label><select id="c-user">${userOptions(state.lastConsume?.userId)}</select></div>
+      <div class="field"><label for="c-units">Units <span class="hint">whole number, 1 or more</span></label><input id="c-units" type="number" min="1" step="1" required value="${state.lastConsume?.units ?? 1}"></div>
+      <div class="field" style="flex-basis:260px"><label for="c-req">Request ID <span class="hint">sending the same ID again returns the first answer</span></label>
+        <div class="row" style="flex-wrap:nowrap"><input id="c-req" required class="mono" value="${esc(state.lastConsume?.requestId ?? newRequestId())}"><button type="button" class="secondary" id="c-new">New ID</button></div></div>
+      <button type="submit">Consume units</button></div></form>
+    <div id="result" aria-live="polite"></div>
+    <section class="block"><h2>This session</h2><div id="session"></div></section>`;
+  const drawSession = () => {
+    $('#session').innerHTML = state.session.length
+      ? `<div class="scroll"><table><thead><tr><th>Time</th><th>User</th><th class="r">Units</th><th>Outcome</th><th>Request ID</th></tr></thead><tbody>${state.session.map((s) => `
+        <tr><td>${esc(new Date(s.at).toLocaleTimeString())}</td><td>${esc(s.userId)}</td><td class="r num">${fmt(s.units)}</td>
+        <td>${s.status === 200 ? (s.accepted ? '<span class="chip ok">accepted</span>' : `<span class="chip bad">rejected</span> <span class="hint">${esc(s.code)}</span>`) : `<span class="chip warn">error ${s.status}</span> <span class="hint">${esc(s.code || '')}</span>`}${s.replayed ? ' <span class="chip">replay</span>' : ''}</td>
+        <td class="mono">${esc(s.requestId)}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty">Requests you send from this page appear here. The full record is under Request history.</div>';
+  };
+  drawSession();
+  const showResult = (r, sent) => {
+    $('#result').innerHTML = receiptHtml(r, sent) + (r.status === 200 ? '<p><button type="button" class="secondary" id="again">Send the same request again</button></p>' : '');
+    const again = $('#again');
+    if (again) again.addEventListener('click', () => submit());
+  };
+  const submit = async () => {
+    const sent = { userId: $('#c-user').value, units: Number($('#c-units').value), requestId: $('#c-req').value.trim() };
+    if (!Number.isInteger(sent.units) || sent.units < 1) return toast('Units must be a whole number of 1 or more', true);
+    state.lastConsume = sent;
+    const r = await v1('POST', '/consume', sent);
+    const b = r.body || {};
+    state.session.unshift({ at: Date.now(), userId: sent.userId, units: sent.units, requestId: sent.requestId, status: r.status, accepted: b.accepted, replayed: b.replayed, code: r.status === 200 ? b.reason?.code : b.error?.code });
+    state.session = state.session.slice(0, 25);
+    showResult(r, sent);
+    drawSession();
+  };
+  $('#consume').addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+  $('#c-new').addEventListener('click', () => { $('#c-req').value = newRequestId(); });
+};
+
+views.usage = async (root, params) => {
+  const period = params.get('period') || currentMonth();
+  const histUser = params.get('user') || '';
+  root.innerHTML = `
+    <h1>Usage</h1>
+    <p class="lede">Usage is counted per calendar month in UTC. Allowances start fresh on the first of each month, and earlier months stay available here.</p>
+    <form id="period" class="row" style="margin-bottom:16px"><div class="field" style="max-width:200px"><label for="u-period">Month</label><input id="u-period" type="month" value="${esc(period)}" required></div>
+      <button type="submit" class="secondary">Show month</button></form>
+    <div id="usage-body"><div class="empty">Loading usage...</div></div>
+    <section class="block"><h2>Month by month</h2>
+      <div class="field" style="max-width:260px"><label for="h-scope">Totals for</label><select id="h-scope"><option value="">Whole account</option>${userOptions(histUser)}</select></div>
+      <div id="history"></div></section>`;
+  $('#period').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const p = new URLSearchParams(location.hash.split('?')[1] || '');
+    p.set('period', $('#u-period').value);
+    location.hash = `#/usage?${p}`;
+  });
+  const r = await v1('GET', `/usage?period=${encodeURIComponent(period)}`);
+  if (!r.ok) { $('#usage-body').innerHTML = `<div class="empty">${esc(errText(r))}</div>`; }
+  else {
+    const u = r.body;
+    const note = u.current ? '' : '<p class="notice">Allowances are shown only for the current month, because plans may have changed since. Totals below are what was used.</p>';
+    $('#usage-body').innerHTML = `${note}
+      <section class="panel"><h2>Account (shared by all users)</h2>${meter(`${planName(u.account.planId)} plan`, u.account.used, u.account.limit)}</section>
+      <section class="block"><h2>Users</h2>${u.users.length ? u.users.map((x) => `<div class="panel" style="margin-bottom:10px"><div class="meter-head"><a href="#/usage?${new URLSearchParams({ period, user: x.userId })}">${esc(x.userId)}</a><span class="hint">${esc(planName(x.planId))}</span></div>${meter('Monthly allowance', x.used, x.limit)}</div>`).join('') : '<div class="empty">No user used any units this month.</div>'}</section>`;
+  }
+  const drawHistory = async () => {
+    const scope = $('#h-scope').value;
+    const h = await v1('GET', `/usage/history${scope ? '?userId=' + encodeURIComponent(scope) : ''}`);
+    if (!h.ok) { $('#history').innerHTML = `<div class="empty">${esc(errText(h))}</div>`; return; }
+    const rows = h.body.periods;
+    const max = Math.max(1, ...rows.map((x) => x.used));
+    $('#history').innerHTML = rows.length
+      ? `<div class="scroll"><table><thead><tr><th>Month (UTC)</th><th class="r">Units used</th><th class="barcell"></th><th></th></tr></thead><tbody>${rows.map((x) => `
+        <tr><td>${esc(x.period)}</td><td class="r num">${fmt(x.used)}</td><td class="barcell"><div class="minibar" style="width:${(x.used / max) * 100}%"></div></td>
+        <td><a href="#/usage?${new URLSearchParams({ period: x.period, ...(scope ? { user: scope } : {}) })}">Open month</a></td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty">No usage has been recorded yet.</div>';
+  };
+  $('#h-scope').addEventListener('change', drawHistory);
+  drawHistory();
+};
+
+views.requests = async (root) => {
+  root.innerHTML = `
+    <h1>Request history</h1>
+    <p class="lede">Every decision is kept, accepted or rejected, with the units, user, time and reason. Newest first.</p>
+    <form id="filters" class="panel"><div class="row">
+      <div class="field"><label for="f-user">User</label><select id="f-user"><option value="">Any user</option>${userOptions()}</select></div>
+      <div class="field"><label for="f-status">Outcome</label><select id="f-status"><option value="">Accepted and rejected</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option></select></div>
+      <div class="field"><label for="f-period">Month <span class="hint">optional</span></label><input id="f-period" type="month"></div>
+      <button type="submit">Apply filters</button></div></form>
+    <div id="req-body" style="margin-top:16px"></div>`;
+  let before = null;
+  let rows = [];
+  const query = () => {
+    const q = new URLSearchParams({ limit: '25' });
+    if ($('#f-user').value) q.set('userId', $('#f-user').value);
+    if ($('#f-status').value) q.set('status', $('#f-status').value);
+    if ($('#f-period').value) q.set('period', $('#f-period').value);
+    if (before) q.set('before', before);
+    return q;
+  };
+  const draw = (more) => {
+    $('#req-body').innerHTML = rows.length
+      ? `<div class="scroll"><table><thead><tr><th>Time</th><th>User</th><th class="r">Units</th><th>Outcome</th><th>Detail</th><th>Request ID</th></tr></thead><tbody>${rows.map((x) => `
+        <tr><td>${esc(when(x.timestamp))}</td><td>${esc(x.userId)}</td><td class="r num">${fmt(x.units)}</td>
+        <td>${x.status === 'accepted' ? '<span class="chip ok">accepted</span>' : '<span class="chip bad">rejected</span>'}</td>
+        <td>${x.status === 'accepted' ? `<span class="hint num">account ${fmt(x.account.used)}/${fmt(x.account.limit)}, user ${fmt(x.user.used)}/${fmt(x.user.limit)} after</span>` : `<span class="mono">${esc(x.reason.code)}</span><div class="hint">${esc(x.reason.message)}</div>`}</td>
+        <td class="mono">${esc(x.requestId)}</td></tr>`).join('')}</tbody></table></div>${more ? '<p><button type="button" class="secondary" id="more">Load older requests</button></p>' : ''}`
+      : '<div class="empty">No requests match. Send one from <a href="#/consume">Consume units</a>, or loosen the filters.</div>';
+    const m = $('#more');
+    if (m) m.addEventListener('click', () => load(true));
+  };
+  const load = async (append) => {
+    if (!append) { before = null; rows = []; }
+    const r = await v1('GET', `/requests?${query()}`);
+    if (!r.ok) return fail(r);
+    rows = rows.concat(r.body.requests);
+    before = r.body.nextBefore;
+    draw(Boolean(before));
+  };
+  $('#filters').addEventListener('submit', (e) => { e.preventDefault(); load(false); });
+  load(false);
+};
+
+/* ---------- router ---------- */
+let renderToken = 0;
+async function render() {
+  const token = ++renderToken;
+  const [path, qs] = (location.hash.slice(2) || 'account').split('?');
+  const route = views[path] ? path : 'account';
+  const params = new URLSearchParams(qs || '');
+  const root = $('#main');
+  if (store.key) { const ok = await loadContext(); if (!ok && !state.account) toast('Your API key was not accepted. Connect again.', true); }
+  else { state.account = null; }
+  if (token !== renderToken) return;
+  renderWho();
+  if (!state.account && route !== 'account') { location.hash = '#/account'; return; }
+  $$('#nav a').forEach((l) => (l.dataset.r === route ? l.setAttribute('aria-current', 'page') : l.removeAttribute('aria-current')));
+  await views[route](root, params);
+  document.title = `${route[0].toUpperCase() + route.slice(1)} | Quota console`;
+}
+window.addEventListener('hashchange', render);
+renderHealth().then(render);
+</script>
+</body>
+</html>
