@@ -554,26 +554,47 @@ views.usage = async (root, params) => {
     p.set('period', $('#u-period').value);
     location.hash = `#/usage?${p}`;
   });
-  const r = await v1('GET', `/usage?period=${encodeURIComponent(period)}`);
+  const renderUserUsage = (users) => users.map((x) => `<div class="panel" style="margin-bottom:10px"><div class="meter-head"><a href="#/usage?${new URLSearchParams({ period, user: x.userId })}">${esc(x.userId)}</a><span class="hint">${esc(planName(x.planId))}</span></div>${meter('Monthly allowance', x.used, x.limit)}</div>`).join('');
+  const r = await v1('GET', `/usage?period=${encodeURIComponent(period)}&limit=100`);
   if (!r.ok) { $('#usage-body').innerHTML = `<div class="empty">${esc(errText(r))}</div>`; }
   else {
     const u = r.body;
+    let usageAfter = u.nextAfter;
     const note = u.current ? '' : '<p class="notice">Allowances are shown only for the current month, because plans may have changed since. Totals below are what was used.</p>';
     $('#usage-body').innerHTML = `${note}
       <section class="panel"><h2>Account (shared by all users)</h2>${meter(`${planName(u.account.planId)} plan`, u.account.used, u.account.limit)}</section>
-      <section class="block"><h2>Users</h2>${u.users.length ? u.users.map((x) => `<div class="panel" style="margin-bottom:10px"><div class="meter-head"><a href="#/usage?${new URLSearchParams({ period, user: x.userId })}">${esc(x.userId)}</a><span class="hint">${esc(planName(x.planId))}</span></div>${meter('Monthly allowance', x.used, x.limit)}</div>`).join('') : '<div class="empty">No user used any units this month.</div>'}</section>`;
+      <section class="block"><h2>Users</h2><div id="usage-users">${u.users.length ? renderUserUsage(u.users) : '<div class="empty">No user used any units this month.</div>'}</div>${usageAfter ? '<button type="button" class="secondary" id="more-usage">Load more users</button>' : ''}</section>`;
+    const moreUsage = $('#more-usage');
+    if (moreUsage) moreUsage.addEventListener('click', async () => {
+      moreUsage.disabled = true;
+      const next = await v1('GET', `/usage?period=${encodeURIComponent(period)}&limit=100&after=${encodeURIComponent(usageAfter)}`);
+      if (!next.ok) { moreUsage.disabled = false; return fail(next); }
+      $('#usage-users').insertAdjacentHTML('beforeend', renderUserUsage(next.body.users));
+      usageAfter = next.body.nextAfter;
+      if (!usageAfter) moreUsage.remove(); else moreUsage.disabled = false;
+    });
   }
-  const drawHistory = async () => {
+  let historyAfter = null;
+  let historyRows = [];
+  const drawHistory = async (append = false) => {
     const scope = $('#h-scope').value;
-    const h = await v1('GET', `/usage/history${scope ? '?userId=' + encodeURIComponent(scope) : ''}`);
+    if (!append) { historyAfter = null; historyRows = []; }
+    const query = new URLSearchParams({ limit: '100' });
+    if (scope) query.set('userId', scope);
+    if (historyAfter) query.set('after', historyAfter);
+    const h = await v1('GET', `/usage/history?${query}`);
     if (!h.ok) { $('#history').innerHTML = `<div class="empty">${esc(errText(h))}</div>`; return; }
-    const rows = h.body.periods;
-    const max = Math.max(1, ...rows.map((x) => x.used));
-    $('#history').innerHTML = rows.length
-      ? `<div class="scroll"><table><thead><tr><th>Month (UTC)</th><th class="r">Units used</th><th class="barcell"></th><th></th></tr></thead><tbody>${rows.map((x) => `
+    historyRows = historyRows.concat(h.body.periods);
+    historyAfter = h.body.nextAfter;
+    const max = Math.max(1, ...historyRows.map((x) => x.used));
+    $('#history').innerHTML = historyRows.length
+      ? `<div class="scroll"><table><thead><tr><th>Month (UTC)</th><th class="r">Units used</th><th class="barcell"></th><th></th></tr></thead><tbody>${historyRows.map((x) => `
         <tr><td>${esc(x.period)}</td><td class="r num">${fmt(x.used)}</td><td class="barcell"><div class="minibar" style="width:${(x.used / max) * 100}%"></div></td>
         <td><a href="#/usage?${new URLSearchParams({ period: x.period, ...(scope ? { user: scope } : {}) })}">Open month</a></td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty">No usage has been recorded yet.</div>';
+    if (historyAfter) $('#history').insertAdjacentHTML('beforeend', '<p><button type="button" class="secondary" id="more-history">Load older months</button></p>');
+    const moreHistory = $('#more-history');
+    if (moreHistory) moreHistory.addEventListener('click', () => drawHistory(true));
   };
   $('#h-scope').addEventListener('change', drawHistory);
   drawHistory();

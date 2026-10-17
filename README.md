@@ -101,9 +101,9 @@ All bodies/responses are JSON. Errors: `{"error": {"code", "message", "details?"
 | `PATCH /v1/plans/:id`, `DELETE /v1/plans/:id` | Update / delete own plan (predefined: 403) |
 | `POST /v1/users` `{userId, planId?}`, `GET /v1/users`, `GET /v1/users/:userId`, `PUT /v1/users/:userId/plan` | Manage users |
 | `POST /v1/consume` `{userId, units, requestId}` | Decide and record consumption (`units`: positive integer) |
-| `GET /v1/usage?period=YYYY-MM` | Account usage + per-user usage for a month |
+| `GET /v1/usage?period=YYYY-MM&limit=&after=` | Account usage + a page of per-user usage (default 100, max 500; `after` is the last `userId`) |
 | `GET /v1/users/:userId/usage?period=` | One user's usage and the shared account balance |
-| `GET /v1/usage/history?userId=` | Monthly totals (account, or one user) |
+| `GET /v1/usage/history?userId=&limit=&after=` | Monthly totals (account, or one user), newest first (default 100, max 500; `after` is the last `YYYY-MM`) |
 | `GET /v1/requests?userId=&status=&period=&limit=&before=` | Decision history, newest first, cursor via `before` |
 
 ```bash
@@ -195,7 +195,7 @@ Recorded decisions can exceed the 2xx count slightly because requests still in f
 - Account creation is gated by one shared `ADMIN_TOKEN`; there is no key rotation or revocation endpoint.
 - Time comes from the service clock; multi-instance deployments rely on synchronised clocks at month boundaries.
 - Consumption for one account serialises on one row (see design trade-off); extremely hot single accounts are bounded by that.
-- `/v1/usage` lists at most 1,000 users; `/v1/users` and `/v1/requests` are cursor-paginated.
+- `/v1/usage`, `/v1/usage/history`, `/v1/users`, and `/v1/requests` are cursor-paginated.
 - Predefined plan limits are fixed by migration (changing them requires a new migration).
 - Totals are stored as bigint but handled as JS numbers; limits are capped at 10^12 and units per request at 10^9.
 - No rate limiting or request-size limits beyond a 64 KB body cap.

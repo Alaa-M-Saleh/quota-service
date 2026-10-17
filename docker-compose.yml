@@ -1,5 +1,5 @@
 # docker compose up --build
-# Starts PostgreSQL, the service (migrations + predefined plans run on startup) and the example client.
+# Starts PostgreSQL, the API, web console, and scripted example client.
 services:
   db:
     image: postgres:16
