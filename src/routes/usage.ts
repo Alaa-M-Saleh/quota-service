@@ -10,14 +10,27 @@ const currentPeriod = (now: Date) => periodOf(now).slice(0, 7);
 
 export function usageRoutes(app: FastifyInstance, pool: Pool, now: () => Date) {
   app.get('/usage', async (req) => {
-    const { period } = z.object({ period: periodSchema.optional() }).parse(req.query);
-    return accountUsage(pool, req.accountId, period ?? currentPeriod(now()), now());
+    const q = z
+      .object({
+        period: periodSchema.optional(),
+        limit: z.coerce.number().int().min(1).max(500).default(100),
+        after: z.string().min(1).max(200).optional(),
+      })
+      .parse(req.query);
+    return accountUsage(pool, req.accountId, q.period ?? currentPeriod(now()), now(), q.limit, q.after);
   });
 
   app.get('/usage/history', async (req) => {
-    const { userId } = z.object({ userId: z.string().min(1).optional() }).parse(req.query);
-    if (userId) await assertUser(pool, req.accountId, userId);
-    return { scope: userId ? 'user' : 'account', userId: userId ?? null, periods: await usageHistory(pool, req.accountId, userId) };
+    const q = z
+      .object({
+        userId: z.string().min(1).max(200).optional(),
+        limit: z.coerce.number().int().min(1).max(500).default(100),
+        after: periodSchema.optional(),
+      })
+      .parse(req.query);
+    if (q.userId) await assertUser(pool, req.accountId, q.userId);
+    const page = await usageHistory(pool, req.accountId, q.userId, q.limit, q.after);
+    return { scope: q.userId ? 'user' : 'account', userId: q.userId ?? null, ...page };
   });
 
   app.get('/users/:userId/usage', async (req) => {

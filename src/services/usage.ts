@@ -18,7 +18,7 @@ function allowance(planId: string, allow: number, used: number, current: boolean
     : { planId, limit: null, used, remaining: null };
 }
 
-export async function accountUsage(pool: Pool, accountId: string, period: string, now: Date) {
+export async function accountUsage(pool: Pool, accountId: string, period: string, now: Date, limit = 100, after?: string) {
   const current = toPeriodDate(period) === periodOf(now);
   const acc = await pool.query(
     `SELECT a.plan_id, p.monthly_allowance, COALESCE(au.used, 0) AS used
@@ -31,16 +31,19 @@ export async function accountUsage(pool: Pool, accountId: string, period: string
     `SELECT u.user_id, u.plan_id, p.monthly_allowance, uu.used
        FROM users u JOIN plans p ON p.id = u.plan_id
        LEFT JOIN user_usage uu ON uu.account_id = u.account_id AND uu.user_id = u.user_id AND uu.period = $2
-      WHERE u.account_id = $1 AND ($3 OR uu.used IS NOT NULL)
-      ORDER BY u.user_id LIMIT 1000`,
-    [accountId, toPeriodDate(period), current],
+       WHERE u.account_id = $1 AND ($3 OR uu.used IS NOT NULL)
+         AND ($4::text IS NULL OR u.user_id > $4)
+      ORDER BY u.user_id LIMIT $5`,
+    [accountId, toPeriodDate(period), current, after ?? null, limit + 1],
   );
   const a = acc.rows[0];
+  const page = users.rows.slice(0, limit);
   return {
     period,
     current,
     account: allowance(a.plan_id, a.monthly_allowance, a.used, current),
-    users: users.rows.map((u) => ({ userId: u.user_id, ...allowance(u.plan_id, u.monthly_allowance, u.used ?? 0, current) })),
+    users: page.map((u) => ({ userId: u.user_id, ...allowance(u.plan_id, u.monthly_allowance, u.used ?? 0, current) })),
+    nextAfter: users.rows.length > limit ? page[page.length - 1].user_id : null,
   };
 }
 
@@ -69,17 +72,24 @@ export async function userUsage(pool: Pool, accountId: string, userId: string, p
   };
 }
 
-export async function usageHistory(pool: Pool, accountId: string, userId?: string) {
+export async function usageHistory(pool: Pool, accountId: string, userId?: string, limit = 100, after?: string) {
+  const afterDate = after ? toPeriodDate(after) : null;
   const r = userId
     ? await pool.query(
         `SELECT to_char(period, 'YYYY-MM') AS period, used FROM user_usage
-          WHERE account_id = $1 AND user_id = $2 ORDER BY period DESC LIMIT 120`,
-        [accountId, userId],
+          WHERE account_id = $1 AND user_id = $2 AND ($3::date IS NULL OR period < $3::date)
+          ORDER BY period DESC LIMIT $4`,
+        [accountId, userId, afterDate, limit + 1],
       )
     : await pool.query(
         `SELECT to_char(period, 'YYYY-MM') AS period, used FROM account_usage
-          WHERE account_id = $1 ORDER BY period DESC LIMIT 120`,
-        [accountId],
+          WHERE account_id = $1 AND ($2::date IS NULL OR period < $2::date)
+          ORDER BY period DESC LIMIT $3`,
+        [accountId, afterDate, limit + 1],
       );
-  return r.rows as { period: string; used: number }[];
+  const page = r.rows.slice(0, limit) as { period: string; used: number }[];
+  return {
+    periods: page,
+    nextAfter: r.rows.length > limit ? page[page.length - 1].period : null,
+  };
 }

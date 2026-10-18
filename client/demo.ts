@@ -58,34 +58,40 @@ async function main() {
   if (acc.status !== 201) throw new Error(`bootstrap failed (${acc.status}): ${JSON.stringify(acc.body)}`);
   apiKey = acc.body.apiKey;
   const accountPlan = (await api('POST', '/plans', { name: 'demo-account', kind: 'account', monthlyAllowance: 50 })).body;
-  const userPlan = (await api('POST', '/plans', { name: 'demo-user', kind: 'user', monthlyAllowance: 30 })).body;
+  const alicePlan = (await api('POST', '/plans', { name: 'demo-alice-starter', kind: 'user', monthlyAllowance: 20 })).body;
+  const aliceUpgrade = (await api('POST', '/plans', { name: 'demo-alice-upgrade', kind: 'user', monthlyAllowance: 30 })).body;
+  const bobPlan = (await api('POST', '/plans', { name: 'demo-bob', kind: 'user', monthlyAllowance: 40 })).body;
   await api('PUT', '/account/plan', { planId: accountPlan.id });
-  await api('POST', '/users', { userId: 'alice', planId: userPlan.id });
-  await api('POST', '/users', { userId: 'bob', planId: userPlan.id });
-  console.log('  account allowance 50 shared; each user allowance 30');
+  await api('POST', '/users', { userId: 'alice', planId: alicePlan.id });
+  await api('POST', '/users', { userId: 'bob', planId: bobPlan.id });
+  console.log('  account allowance 50 shared; Alice allowance 20; Bob allowance 40');
 
   console.log('\n1. Accepted request');
   expect('alice +10 accepted', (await processDocument('alice', 10)).accepted === true);
 
-  console.log('\n2. Rejection caused by a USER limit (alice would reach 35 of 30)');
-  const userRej = await processDocument('alice', 25);
+  console.log('\n2. Rejection caused by Alice\'s USER limit (she would reach 25 of 20)');
+  const userRej = await processDocument('alice', 15);
   expect('rejected by the user limit', !userRej.accepted && userRej.reason.code === 'USER_MONTHLY_ALLOWANCE_EXCEEDED');
 
-  console.log('\n3. Rejection caused by the shared ACCOUNT limit (bob uses 30, then alice asks for 15 more)');
-  await processDocument('bob', 30);
-  const accRej = await processDocument('alice', 15);
-  expect('rejected by the account limit although alice has allowance left', !accRej.accepted && accRej.reason.code === 'ACCOUNT_MONTHLY_ALLOWANCE_EXCEEDED');
+  console.log('\n3. Switch Alice to a larger user plan without changing the client');
+  await api('PUT', '/users/alice/plan', { planId: aliceUpgrade.id });
+  expect('alice +15 accepted under her new 30-unit plan', (await processDocument('alice', 15)).accepted === true);
+
+  console.log('\n4. Rejection caused by the shared ACCOUNT limit (bob uses 25, then alice asks for 1)');
+  expect('bob +25 accepted', (await processDocument('bob', 25)).accepted === true);
+  const accRej = await processDocument('alice', 1);
+  expect('rejected by the account limit while alice still has 5 user units left', !accRej.accepted && accRej.reason.code === 'ACCOUNT_MONTHLY_ALLOWANCE_EXCEEDED');
   await showUsage('usage now');
 
-  console.log('\n4. Idempotent retry: repeating a request id returns the original outcome and consumes nothing');
-  const replay = (await api('POST', '/consume', { userId: 'alice', units: 15, requestId: accRej.requestId })).body;
+  console.log('\n5. Idempotent retry: repeating a request id returns the original outcome and consumes nothing');
+  const replay = (await api('POST', '/consume', { userId: 'alice', units: 1, requestId: accRej.requestId })).body;
   expect('replay is flagged and still rejected', replay.replayed === true && replay.accepted === false);
 
-  console.log('\n5. Plan change (account allowance 50 -> 200); same client code, new decision');
+  console.log('\n6. Raise the shared account plan (50 -> 200); same client code, new decision');
   await api('PATCH', `/plans/${accountPlan.id}`, { monthlyAllowance: 200 });
-  expect('alice +15 now accepted', (await processDocument('alice', 15)).accepted === true);
+  expect('alice +1 now accepted', (await processDocument('alice', 1)).accepted === true);
 
-  console.log('\n6. Current usage, remaining allowances and request outcomes');
+  console.log('\n7. Current usage, remaining allowances and request outcomes');
   await showUsage('final usage');
   const hist = (await api('GET', '/requests')).body.requests;
   for (const r of hist.reverse()) console.log(`    ${r.status.padEnd(8)} ${r.userId.padEnd(6)} ${String(r.units).padStart(3)} units  ${r.requestId}${r.reason ? `  (${r.reason.code})` : ''}`);

@@ -13,7 +13,8 @@ docker compose up --build        # PostgreSQL + service + example client
 ```
 
 Then open the **web console at <http://localhost:8080>** (see below). The `client` container also runs a scripted
-command-line demo (accepted request, user-limit rejection, shared-account rejection, plan change, usage/outcomes) and exits;
+command-line demo with two users on different plans, a user-limit rejection, an individual plan switch, a shared-account
+rejection, an account plan change, and the resulting usage/outcomes; it then exits.
 the core API stays up on <http://localhost:3000>. Configuration: `ADMIN_TOKEN`
 (default `dev-admin-token`, override with `ADMIN_TOKEN=... docker compose up --build`).
 
@@ -112,6 +113,72 @@ curl -s -X POST localhost:3000/v1/users   -H "x-api-key: $KEY" -H 'content-type:
 curl -s -X POST localhost:3000/v1/consume -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"userId":"alice","units":10,"requestId":"doc-1"}'
 ```
 
+Successful responses are JSON. An accepted consume response includes the original request metadata and both updated
+balances; a rejected response includes a structured reason and does not increment either counter:
+
+```json
+{
+  "accepted": true,
+  "requestId": "doc-1",
+  "userId": "alice",
+  "units": 10,
+  "period": "2026-10",
+  "timestamp": "2026-10-18T12:00:00.000Z",
+  "replayed": false,
+  "account": { "planId": "starter", "limit": 1000, "used": 10, "remaining": 990 },
+  "user": { "planId": "basic", "limit": 100, "used": 10, "remaining": 90 }
+}
+```
+
+```json
+{
+  "accepted": false,
+  "requestId": "doc-2",
+  "userId": "alice",
+  "units": 25,
+  "period": "2026-10",
+  "timestamp": "2026-10-18T12:01:00.000Z",
+  "replayed": false,
+  "reason": {
+    "code": "USER_MONTHLY_ALLOWANCE_EXCEEDED",
+    "scope": "user",
+    "accountId": "<account-uuid>",
+    "userId": "alice",
+    "rule": "monthly_allowance",
+    "requested": 25,
+    "limit": 100,
+    "used": 90,
+    "remaining": 10,
+    "message": "User \"alice\" of account <account-uuid>: requested 25 units but only 10 remain of the monthly allowance 100 (plan \"basic\", used 90)"
+  }
+}
+```
+
+`GET /v1/usage` returns `{ period, current, account, users, nextAfter }`. `account` is the shared account meter;
+`users` contains at most `limit` users, ordered by `userId`. For another page, pass the returned `nextAfter` value as
+`after`; it is `null` on the final page. Historical periods include `used` but report `limit` and `remaining` as `null`
+because the plan may have changed since then. `GET /v1/usage/history` returns
+`{ scope, userId, periods, nextAfter }`; periods are newest first, and its `nextAfter` is the last `YYYY-MM` on the
+page. Pass it unchanged as `after` to fetch older months. Both endpoints default to 100 records and accept `limit` from
+1 to 500.
+
+### Database design
+
+`migrations/001_init.sql` defines the persistent model:
+
+| Table | Purpose and key relationships |
+|---|---|
+| `accounts` | One row per calling application; stores the account name, SHA-256 API-key hash, and assigned account plan. |
+| `plans` | Predefined plans have no owner; custom plans reference their owning account. `kind` distinguishes account and user plans. |
+| `users` | Caller-chosen user IDs scoped by account; each row references a user plan. Primary key is `(account_id, user_id)`. |
+| `account_usage` | Shared monthly counter keyed by `(account_id, period)`. |
+| `user_usage` | Individual monthly counter keyed by `(account_id, user_id, period)` and linked to the registered user. |
+| `consumption_requests` | Append-only decision history, including accepted and rejected outcomes. `(account_id, request_id)` is unique for idempotency. |
+
+Monthly counter rows are retained for historical queries. Composite foreign keys enforce plan kind and user ownership;
+database checks prevent negative counters and invalid plan limits. The account and user counters are incremented together
+in the same transaction as the recorded decision.
+
 ## Correctness and concurrency design
 
 Each consume call is one PostgreSQL transaction (READ COMMITTED), see `src/services/consume.ts`:
@@ -136,7 +203,7 @@ npm test
 
 36 tests against a real PostgreSQL (wiped between tests, `fileParallelism` off) covering: admin/API-key auth, account isolation
 (users, plans, usage, history, request ids), predefined/read-only plans, custom plans and deletion rules, accept/reject decisions and reasons,
-per-request caps, exact fit, idempotent replay of accepted and rejected outcomes, 409 conflicts, history filters and paging, UTC month rollover
+per-request caps, exact fit, idempotent replay of accepted and rejected outcomes, 409 conflicts, request-history filters and paging, UTC month rollover
 and historical queries, immediate plan changes, allowance reduction below usage, shared plans with separate usage, concurrency
 (400 parallel requests against a 100-unit account allowance ⇒ exactly 100 accepted; per-user limit; 50 parallel duplicates of one request id ⇒
 consumed once; plan lowered mid-flight), and persistence across a restart (new pool and app instance). The web console is tested by loading the real page and its real
