@@ -7,16 +7,25 @@ COPY src ./src
 COPY client ./client
 COPY perf ./perf
 COPY web ./web
-RUN npm run build && npm prune --omit=dev
+COPY migrations ./migrations
+COPY tests ./tests
+COPY vitest.config.ts ./
+RUN npm run build
 
-FROM node:22-slim
+FROM build AS test
+CMD ["npm", "test"]
+
+FROM build AS production-deps
+RUN npm prune --omit=dev
+
+FROM node:22-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=build /app/node_modules ./node_modules
+COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY package.json ./
-COPY migrations ./migrations
-COPY web/public ./web/public
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/web/public ./web/public
 USER node
 EXPOSE 3000
 CMD ["node", "dist/src/server.js"]

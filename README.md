@@ -195,10 +195,18 @@ Trade-off: all consumption for one account serialises on its account counter row
 
 ## Tests
 
-```bash
-# needs PostgreSQL; creates/uses the database in TEST_DATABASE_URL
-# (default postgres://postgres:postgres@localhost:5432/quota_test)
-npm test
+The test command needs only Docker Compose; it builds an image with Node.js 22 and the development dependencies, starts a separate PostgreSQL 16 database, waits until it is ready, and runs the full suite. It does not need a local Node.js or PostgreSQL installation and does not connect to the app's database.
+
+From the repository root, run:
+
+```sh
+docker compose -p quota-service-test -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
+```
+
+The command returns the test suite's exit code. After it finishes, remove the test containers with:
+
+```sh
+docker compose -p quota-service-test -f docker-compose.test.yml down --remove-orphans
 ```
 
 36 tests against a real PostgreSQL (wiped between tests, `fileParallelism` off) covering: admin/API-key auth, account isolation
